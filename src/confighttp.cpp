@@ -1,10 +1,9 @@
 /**
  * @file src/confighttp.cpp
- * @brief todo
+ * @brief Definitions for the Web UI Config HTTP server.
  *
  * @todo Authentication, better handling of routes common to nvhttp, cleanup
  */
-
 #define BOOST_BIND_GLOBAL_PLACEHOLDERS
 
 #include "process.h"
@@ -29,8 +28,10 @@
 #include "config.h"
 #include "confighttp.h"
 #include "crypto.h"
+#include "file_handler.h"
+#include "globals.h"
 #include "httpcommon.h"
-#include "main.h"
+#include "logging.h"
 #include "network.h"
 #include "nvhttp.h"
 #include "platform/common.h"
@@ -52,8 +53,8 @@ namespace confighttp {
   using req_https_t = std::shared_ptr<typename SimpleWeb::ServerBase<SimpleWeb::HTTPS>::Request>;
 
   enum class op_e {
-    ADD,
-    REMOVE
+    ADD,  ///< Add client
+    REMOVE  ///< Remove client
   };
 
   void
@@ -76,7 +77,7 @@ namespace confighttp {
 
   void
   send_unauthorized(resp_https_t response, req_https_t request) {
-    auto address = request->remote_endpoint().address().to_string();
+    auto address = net::addr_to_normalized_string(request->remote_endpoint().address());
     BOOST_LOG(info) << "Web UI: ["sv << address << "] -- not authorized"sv;
     const SimpleWeb::CaseInsensitiveMultimap headers {
       { "WWW-Authenticate", R"(Basic realm="Sunshine Gamestream Host", charset="UTF-8")" }
@@ -86,7 +87,7 @@ namespace confighttp {
 
   void
   send_redirect(resp_https_t response, req_https_t request, const char *path) {
-    auto address = request->remote_endpoint().address().to_string();
+    auto address = net::addr_to_normalized_string(request->remote_endpoint().address());
     BOOST_LOG(info) << "Web UI: ["sv << address << "] -- not authorized"sv;
     const SimpleWeb::CaseInsensitiveMultimap headers {
       { "Location", path }
@@ -96,7 +97,7 @@ namespace confighttp {
 
   bool
   authenticate(resp_https_t response, req_https_t request) {
-    auto address = request->remote_endpoint().address().to_string();
+    auto address = net::addr_to_normalized_string(request->remote_endpoint().address());
     auto ip_type = net::from_address(address);
 
     if (ip_type > http::origin_web_ui_allowed) {
@@ -154,18 +155,19 @@ namespace confighttp {
               << data.str();
   }
 
-  // todo - combine these functions into a single function that accepts the page, i.e "index", "pin", "apps"
+  /**
+   * @todo combine these functions into a single function that accepts the page, i.e "index", "pin", "apps"
+   */
   void
   getIndexPage(resp_https_t response, req_https_t request) {
     if (!authenticate(response, request)) return;
 
     print_req(request);
 
-    std::string header = read_file(WEB_DIR "header.html");
-    std::string content = read_file(WEB_DIR "index.html");
+    std::string content = file_handler::read_file(WEB_DIR "index.html");
     SimpleWeb::CaseInsensitiveMultimap headers;
     headers.emplace("Content-Type", "text/html; charset=utf-8");
-    response->write(header + content, headers);
+    response->write(content, headers);
   }
 
   void
@@ -174,11 +176,10 @@ namespace confighttp {
 
     print_req(request);
 
-    std::string header = read_file(WEB_DIR "header.html");
-    std::string content = read_file(WEB_DIR "pin.html");
+    std::string content = file_handler::read_file(WEB_DIR "pin.html");
     SimpleWeb::CaseInsensitiveMultimap headers;
     headers.emplace("Content-Type", "text/html; charset=utf-8");
-    response->write(header + content, headers);
+    response->write(content, headers);
   }
 
   void
@@ -187,12 +188,11 @@ namespace confighttp {
 
     print_req(request);
 
-    std::string header = read_file(WEB_DIR "header.html");
-    std::string content = read_file(WEB_DIR "apps.html");
+    std::string content = file_handler::read_file(WEB_DIR "apps.html");
     SimpleWeb::CaseInsensitiveMultimap headers;
     headers.emplace("Content-Type", "text/html; charset=utf-8");
     headers.emplace("Access-Control-Allow-Origin", "https://images.igdb.com/");
-    response->write(header + content, headers);
+    response->write(content, headers);
   }
 
   void
@@ -201,11 +201,10 @@ namespace confighttp {
 
     print_req(request);
 
-    std::string header = read_file(WEB_DIR "header.html");
-    std::string content = read_file(WEB_DIR "clients.html");
+    std::string content = file_handler::read_file(WEB_DIR "clients.html");
     SimpleWeb::CaseInsensitiveMultimap headers;
     headers.emplace("Content-Type", "text/html; charset=utf-8");
-    response->write(header + content, headers);
+    response->write(content, headers);
   }
 
   void
@@ -214,11 +213,10 @@ namespace confighttp {
 
     print_req(request);
 
-    std::string header = read_file(WEB_DIR "header.html");
-    std::string content = read_file(WEB_DIR "config.html");
+    std::string content = file_handler::read_file(WEB_DIR "config.html");
     SimpleWeb::CaseInsensitiveMultimap headers;
     headers.emplace("Content-Type", "text/html; charset=utf-8");
-    response->write(header + content, headers);
+    response->write(content, headers);
   }
 
   void
@@ -227,11 +225,10 @@ namespace confighttp {
 
     print_req(request);
 
-    std::string header = read_file(WEB_DIR "header.html");
-    std::string content = read_file(WEB_DIR "password.html");
+    std::string content = file_handler::read_file(WEB_DIR "password.html");
     SimpleWeb::CaseInsensitiveMultimap headers;
     headers.emplace("Content-Type", "text/html; charset=utf-8");
-    response->write(header + content, headers);
+    response->write(content, headers);
   }
 
   void
@@ -241,11 +238,10 @@ namespace confighttp {
       send_redirect(response, request, "/");
       return;
     }
-    std::string header = read_file(WEB_DIR "header-no-nav.html");
-    std::string content = read_file(WEB_DIR "welcome.html");
+    std::string content = file_handler::read_file(WEB_DIR "welcome.html");
     SimpleWeb::CaseInsensitiveMultimap headers;
     headers.emplace("Content-Type", "text/html; charset=utf-8");
-    response->write(header + content, headers);
+    response->write(content, headers);
   }
 
   void
@@ -254,29 +250,32 @@ namespace confighttp {
 
     print_req(request);
 
-    std::string header = read_file(WEB_DIR "header.html");
-    std::string content = read_file(WEB_DIR "troubleshooting.html");
+    std::string content = file_handler::read_file(WEB_DIR "troubleshooting.html");
     SimpleWeb::CaseInsensitiveMultimap headers;
     headers.emplace("Content-Type", "text/html; charset=utf-8");
-    response->write(header + content, headers);
+    response->write(content, headers);
   }
 
+  /**
+   * @todo combine function with getSunshineLogoImage and possibly getNodeModules
+   * @todo use mime_types map
+   */
   void
   getFaviconImage(resp_https_t response, req_https_t request) {
-    // todo - combine function with getSunshineLogoImage and possibly getNodeModules
-    // todo - use mime_types map
     print_req(request);
 
-    std::ifstream in(WEB_DIR "images/favicon.ico", std::ios::binary);
+    std::ifstream in(WEB_DIR "images/sunshine.ico", std::ios::binary);
     SimpleWeb::CaseInsensitiveMultimap headers;
     headers.emplace("Content-Type", "image/x-icon");
     response->write(SimpleWeb::StatusCode::success_ok, in, headers);
   }
 
+  /**
+   * @todo combine function with getFaviconImage and possibly getNodeModules
+   * @todo use mime_types map
+   */
   void
   getSunshineLogoImage(resp_https_t response, req_https_t request) {
-    // todo - combine function with getFaviconImage and possibly getNodeModules
-    // todo - use mime_types map
     print_req(request);
 
     std::ifstream in(WEB_DIR "images/logo-sunshine-45.png", std::ios::binary);
@@ -295,14 +294,14 @@ namespace confighttp {
   getNodeModules(resp_https_t response, req_https_t request) {
     print_req(request);
     fs::path webDirPath(WEB_DIR);
-    fs::path nodeModulesPath(webDirPath / "node_modules");
+    fs::path nodeModulesPath(webDirPath / "assets");
 
     // .relative_path is needed to shed any leading slash that might exist in the request path
     auto filePath = fs::weakly_canonical(webDirPath / fs::path(request->path).relative_path());
 
-    // Don't do anything if file does not exist or is outside the node_modules directory
+    // Don't do anything if file does not exist or is outside the assets directory
     if (!isChildPath(filePath, nodeModulesPath)) {
-      BOOST_LOG(warning) << "Someone requested a path " << filePath << " that is outside the node_modules folder";
+      BOOST_LOG(warning) << "Someone requested a path " << filePath << " that is outside the assets folder";
       response->write(SimpleWeb::StatusCode::client_error_bad_request, "Bad Request");
     }
     else if (!fs::exists(filePath)) {
@@ -331,7 +330,7 @@ namespace confighttp {
 
     print_req(request);
 
-    std::string content = read_file(config::stream.file_apps.c_str());
+    std::string content = file_handler::read_file(config::stream.file_apps.c_str());
     SimpleWeb::CaseInsensitiveMultimap headers;
     headers.emplace("Content-Type", "application/json");
     response->write(content, headers);
@@ -343,7 +342,7 @@ namespace confighttp {
 
     print_req(request);
 
-    std::string content = read_file(config::sunshine.log_file.c_str());
+    std::string content = file_handler::read_file(config::sunshine.log_file.c_str());
     SimpleWeb::CaseInsensitiveMultimap headers;
     headers.emplace("Content-Type", "text/plain");
     response->write(SimpleWeb::StatusCode::success_ok, content, headers);
@@ -368,7 +367,7 @@ namespace confighttp {
 
     pt::ptree inputTree, fileTree;
 
-    BOOST_LOG(fatal) << config::stream.file_apps;
+    BOOST_LOG(info) << config::stream.file_apps;
     try {
       // TODO: Input Validation
       pt::read_json(ss, inputTree);
@@ -507,9 +506,7 @@ namespace confighttp {
     auto url = inputTree.get("url", "");
 
     const std::string coverdir = platf::appdata().string() + "/covers/";
-    if (!boost::filesystem::exists(coverdir)) {
-      boost::filesystem::create_directories(coverdir);
-    }
+    file_handler::make_directory(coverdir);
 
     std::basic_string path = coverdir + http::url_escape(key) + ".png";
     if (!url.empty()) {
@@ -549,11 +546,29 @@ namespace confighttp {
     outputTree.put("platform", SUNSHINE_PLATFORM);
     outputTree.put("version", PROJECT_VER);
 
-    auto vars = config::parse_config(read_file(config::sunshine.config_file.c_str()));
+    auto vars = config::parse_config(file_handler::read_file(config::sunshine.config_file.c_str()));
 
     for (auto &[name, value] : vars) {
       outputTree.put(std::move(name), std::move(value));
     }
+  }
+
+  void
+  getLocale(resp_https_t response, req_https_t request) {
+    // we need to return the locale whether authenticated or not
+
+    print_req(request);
+
+    pt::ptree outputTree;
+    auto g = util::fail_guard([&]() {
+      std::ostringstream data;
+
+      pt::write_json(data, outputTree);
+      response->write(data.str());
+    });
+
+    outputTree.put("status", "true");
+    outputTree.put("locale", config::sunshine.locale);
   }
 
   void
@@ -582,7 +597,7 @@ namespace confighttp {
 
         configStream << kv.first << " = " << value << std::endl;
       }
-      write_file(config::sunshine.config_file.c_str(), configStream.str());
+      file_handler::write_file(config::sunshine.config_file.c_str(), configStream.str());
     }
     catch (std::exception &e) {
       BOOST_LOG(warning) << "SaveConfig: "sv << e.what();
@@ -681,7 +696,8 @@ namespace confighttp {
       // TODO: Input Validation
       pt::read_json(ss, inputTree);
       std::string pin = inputTree.get<std::string>("pin");
-      outputTree.put("status", nvhttp::pin(pin));
+      std::string name = inputTree.get<std::string>("name");
+      outputTree.put("status", nvhttp::pin(pin, name));
     }
     catch (std::exception &e) {
       BOOST_LOG(warning) << "SavePin: "sv << e.what();
@@ -705,6 +721,60 @@ namespace confighttp {
       response->write(data.str());
     });
     nvhttp::erase_all_clients();
+    proc::proc.terminate();
+    outputTree.put("status", true);
+  }
+
+  void
+  unpair(resp_https_t response, req_https_t request) {
+    if (!authenticate(response, request)) return;
+
+    print_req(request);
+
+    std::stringstream ss;
+    ss << request->content.rdbuf();
+
+    pt::ptree inputTree, outputTree;
+
+    auto g = util::fail_guard([&]() {
+      std::ostringstream data;
+      pt::write_json(data, outputTree);
+      response->write(data.str());
+    });
+
+    try {
+      // TODO: Input Validation
+      pt::read_json(ss, inputTree);
+      std::string uuid = inputTree.get<std::string>("uuid");
+      outputTree.put("status", nvhttp::unpair_client(uuid));
+    }
+    catch (std::exception &e) {
+      BOOST_LOG(warning) << "Unpair: "sv << e.what();
+      outputTree.put("status", false);
+      outputTree.put("error", e.what());
+      return;
+    }
+  }
+
+  void
+  listClients(resp_https_t response, req_https_t request) {
+    if (!authenticate(response, request)) return;
+
+    print_req(request);
+
+    pt::ptree named_certs = nvhttp::get_all_clients();
+
+    pt::ptree outputTree;
+
+    outputTree.put("status", false);
+
+    auto g = util::fail_guard([&]() {
+      std::ostringstream data;
+      pt::write_json(data, outputTree);
+      response->write(data.str());
+    });
+
+    outputTree.add_child("named_certs", named_certs);
     outputTree.put("status", true);
   }
 
@@ -730,35 +800,39 @@ namespace confighttp {
   start() {
     auto shutdown_event = mail::man->event<bool>(mail::shutdown);
 
-    auto port_https = map_port(PORT_HTTPS);
+    auto port_https = net::map_port(PORT_HTTPS);
+    auto address_family = net::af_from_enum_string(config::sunshine.address_family);
 
     https_server_t server { config::nvhttp.cert, config::nvhttp.pkey };
     server.default_resource["GET"] = not_found;
     server.resource["^/$"]["GET"] = getIndexPage;
-    server.resource["^/pin$"]["GET"] = getPinPage;
-    server.resource["^/apps$"]["GET"] = getAppsPage;
-    server.resource["^/clients$"]["GET"] = getClientsPage;
-    server.resource["^/config$"]["GET"] = getConfigPage;
-    server.resource["^/password$"]["GET"] = getPasswordPage;
-    server.resource["^/welcome$"]["GET"] = getWelcomePage;
-    server.resource["^/troubleshooting$"]["GET"] = getTroubleshootingPage;
+    server.resource["^/pin/?$"]["GET"] = getPinPage;
+    server.resource["^/apps/?$"]["GET"] = getAppsPage;
+    server.resource["^/clients/?$"]["GET"] = getClientsPage;
+    server.resource["^/config/?$"]["GET"] = getConfigPage;
+    server.resource["^/password/?$"]["GET"] = getPasswordPage;
+    server.resource["^/welcome/?$"]["GET"] = getWelcomePage;
+    server.resource["^/troubleshooting/?$"]["GET"] = getTroubleshootingPage;
     server.resource["^/api/pin$"]["POST"] = savePin;
     server.resource["^/api/apps$"]["GET"] = getApps;
     server.resource["^/api/logs$"]["GET"] = getLogs;
     server.resource["^/api/apps$"]["POST"] = saveApp;
     server.resource["^/api/config$"]["GET"] = getConfig;
     server.resource["^/api/config$"]["POST"] = saveConfig;
+    server.resource["^/api/configLocale$"]["GET"] = getLocale;
     server.resource["^/api/restart$"]["POST"] = restart;
     server.resource["^/api/password$"]["POST"] = savePassword;
     server.resource["^/api/apps/([0-9]+)$"]["DELETE"] = deleteApp;
-    server.resource["^/api/clients/unpair$"]["POST"] = unpairAll;
+    server.resource["^/api/clients/unpair-all$"]["POST"] = unpairAll;
+    server.resource["^/api/clients/list$"]["GET"] = listClients;
+    server.resource["^/api/clients/unpair$"]["POST"] = unpair;
     server.resource["^/api/apps/close$"]["POST"] = closeApp;
     server.resource["^/api/covers/upload$"]["POST"] = uploadCover;
-    server.resource["^/images/favicon.ico$"]["GET"] = getFaviconImage;
+    server.resource["^/images/sunshine.ico$"]["GET"] = getFaviconImage;
     server.resource["^/images/logo-sunshine-45.png$"]["GET"] = getSunshineLogoImage;
-    server.resource["^/node_modules\\/.+$"]["GET"] = getNodeModules;
+    server.resource["^/assets\\/.+$"]["GET"] = getNodeModules;
     server.config.reuse_address = true;
-    server.config.address = "0.0.0.0"s;
+    server.config.address = net::af_to_any_address_string(address_family);
     server.config.port = port_https;
 
     auto accept_and_run = [&](auto *server) {

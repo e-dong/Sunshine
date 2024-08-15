@@ -1,0 +1,13 @@
+[Unit]
+Description=@PROJECT_DESCRIPTION@
+StartLimitIntervalSec=500
+StartLimitBurst=5
+
+[Service]
+@SUNSHINE_SERVICE_START_COMMAND@
+@SUNSHINE_SERVICE_STOP_COMMAND@
+Restart=on-failure
+RestartSec=5s
+
+[Install]
+WantedBy=xdg-desktop-autostart.target

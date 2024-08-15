@@ -32,18 +32,17 @@ apt-get update -y
 apt-get install -y --no-install-recommends \
   build-essential \
   cmake=3.22.* \
+  ca-certificates \
+  doxygen \
   git \
-  libappindicator3-dev \
-  libavdevice-dev \
-  libboost-filesystem-dev=1.74.* \
-  libboost-locale-dev=1.74.* \
-  libboost-log-dev=1.74.* \
-  libboost-program-options-dev=1.74.* \
-  libboost-thread-dev=1.74.* \
+  graphviz \
+  libayatana-appindicator3-dev \
   libcap-dev \
   libcurl4-openssl-dev \
   libdrm-dev \
   libevdev-dev \
+  libminiupnpc-dev \
+  libnotify-dev \
   libnuma-dev \
   libopus-dev \
   libpulse-dev \
@@ -58,16 +57,47 @@ apt-get install -y --no-install-recommends \
   libxfixes-dev \
   libxrandr-dev \
   libxtst-dev \
-  nodejs \
-  npm \
-  wget
-if [[ "${TARGETPLATFORM}" == 'linux/amd64' ]]; then
-  apt-get install -y --no-install-recommends \
-    libmfx-dev
-fi
+  python3.10 \
+  python3.10-venv \
+  udev \
+  wget \
+  x11-xserver-utils \
+  xvfb
 apt-get clean
 rm -rf /var/lib/apt/lists/*
 _DEPS
+
+# install cmake
+# sunshine requires cmake >= 3.25
+WORKDIR /build/cmake
+# https://cmake.org/download/
+ENV CMAKE_VERSION="3.30.1"
+# hadolint ignore=SC3010
+RUN <<_INSTALL_CMAKE
+#!/bin/bash
+cmake_prefix="https://github.com/Kitware/CMake/releases/download/v"
+if [[ "${TARGETPLATFORM}" == 'linux/amd64' ]]; then
+  cmake_arch="x86_64"
+elif [[ "${TARGETPLATFORM}" == 'linux/arm64' ]]; then
+  cmake_arch="aarch64"
+fi
+url="${cmake_prefix}${CMAKE_VERSION}/cmake-${CMAKE_VERSION}-linux-${cmake_arch}.sh"
+echo "cmake url: ${url}"
+wget "$url" --progress=bar:force:noscroll -q --show-progress -O ./cmake.sh
+sh ./cmake.sh --prefix=/usr/local --skip-license
+cmake --version
+_INSTALL_CMAKE
+
+#Install Node
+# hadolint ignore=SC1091
+RUN <<_INSTALL_NODE
+#!/bin/bash
+set -e
+wget -qO- https://raw.githubusercontent.com/nvm-sh/nvm/master/install.sh | bash
+source "$HOME/.nvm/nvm.sh"
+nvm install 20.9.0
+nvm use 20.9.0
+_INSTALL_NODE
 
 # install cuda
 WORKDIR /build/cuda
@@ -95,17 +125,20 @@ _INSTALL_CUDA
 WORKDIR /build/sunshine/
 COPY --link .. .
 
-# setup npm dependencies
-RUN npm install
-
 # setup build directory
 WORKDIR /build/sunshine/build
 
 # cmake and cpack
+# hadolint ignore=SC1091
 RUN <<_MAKE
 #!/bin/bash
 set -e
+#Set Node version
+source "$HOME/.nvm/nvm.sh"
+nvm use 20.9.0
+#Actually build
 cmake \
+  -DBUILD_WERROR=ON \
   -DCMAKE_CUDA_COMPILER:PATH=/build/cuda/bin/nvcc \
   -DCMAKE_BUILD_TYPE=Release \
   -DCMAKE_INSTALL_PREFIX=/usr \
@@ -119,6 +152,17 @@ cmake \
 make -j "$(nproc)"
 cpack -G DEB
 _MAKE
+
+# run tests
+WORKDIR /build/sunshine/build/tests
+# hadolint ignore=SC1091
+RUN <<_TEST
+#!/bin/bash
+set -e
+export DISPLAY=:1
+Xvfb ${DISPLAY} -screen 0 1024x768x24 &
+./test_sunshine --gtest_color=yes
+_TEST
 
 FROM scratch AS artifacts
 ARG BASE
